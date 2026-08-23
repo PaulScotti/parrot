@@ -6,11 +6,13 @@ enum Hotkey: String, CaseIterable, ExpressibleByArgument {
     case fn
     case leftControl = "left-control"
     case rightControl = "right-control"
+    case backslash
 
-    var mask: CGEventFlags {
+    var modifierMask: CGEventFlags? {
         switch self {
         case .fn: return .maskSecondaryFn
         case .leftControl, .rightControl: return .maskControl
+        case .backslash: return nil
         }
     }
 
@@ -21,14 +23,18 @@ enum Hotkey: String, CaseIterable, ExpressibleByArgument {
         case .fn: return nil
         case .leftControl: return 59
         case .rightControl: return 62
+        case .backslash: return 42
         }
     }
+
+    var suppressesKeyEvents: Bool { self == .backslash }
 
     var displayName: String {
         switch self {
         case .fn: return "Fn"
         case .leftControl: return "Left Control"
         case .rightControl: return "Right Control"
+        case .backslash: return "Backslash"
         }
     }
 }

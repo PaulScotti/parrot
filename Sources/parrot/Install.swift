@@ -18,7 +18,10 @@ struct Install: ParsableCommand {
     var uninstall: Bool = false
 
     @Option(name: .long, help: "Push-to-talk key for the launch-at-login daemon.")
-    var hotkey: Hotkey = .fn
+    var hotkey: Hotkey = .backslash
+
+    @Option(name: .long, help: "Transcription model for the launch-at-login daemon.")
+    var model: String?
 
     func run() throws {
         if launchAtLogin == uninstall {
@@ -48,10 +51,19 @@ struct Install: ParsableCommand {
 
     private func writeAgent() throws {
         let binary = try resolveBinaryPath()
+        if let model, ModelRegistry.find(model) == nil {
+            FileHandle.standardError.write(Data("unknown model: \(model)\n".utf8))
+            throw ExitCode(1)
+        }
+
+        var arguments = [binary, "run", "--skip-doctor", "--hotkey", hotkey.rawValue]
+        if let model {
+            arguments.append(contentsOf: ["--model", model])
+        }
 
         let plist: [String: Any] = [
             "Label": Self.label,
-            "ProgramArguments": [binary, "run", "--skip-doctor", "--hotkey", hotkey.rawValue],
+            "ProgramArguments": arguments,
             "RunAtLoad": true,
             "KeepAlive": ["SuccessfulExit": false] as [String: Any],
             "ProcessType": "Interactive",
@@ -84,6 +96,7 @@ struct Install: ParsableCommand {
         print("  plist:  \(url.path)")
         print("  binary: \(binary)")
         print("  hotkey: \(hotkey.displayName)")
+        print("  model:  \(model ?? "recommended")")
         print("  logs:   /tmp/parrot.out.log, /tmp/parrot.err.log")
     }
 
@@ -99,22 +112,22 @@ struct Install: ParsableCommand {
     }
 
     private func resolveBinaryPath() throws -> String {
-        // /usr/local/bin/parrot is the canonical install path. Honor a real
-        // location if running from elsewhere (e.g. dev).
-        let candidate = "/usr/local/bin/parrot"
-        if FileManager.default.isExecutableFile(atPath: candidate) {
+        // Prefer the native Apple Silicon prefix, then the upstream install
+        // path. This also makes launchd use the same binary found first on PATH.
+        let candidates = ["/opt/homebrew/bin/parrot", "/usr/local/bin/parrot"]
+        if let candidate = candidates.first(where: FileManager.default.isExecutableFile(atPath:)) {
             return candidate
         }
         // Fall back to the running executable's resolved path.
         let argv0 = CommandLine.arguments.first ?? "parrot"
         if argv0.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: argv0) {
             FileHandle.standardError.write(Data(
-                "note: /usr/local/bin/parrot not found; using \(argv0)\n".utf8
+            "note: no installed parrot binary found; using \(argv0)\n".utf8
             ))
             return argv0
         }
         FileHandle.standardError.write(Data(
-            "couldn't locate the parrot binary. install it to /usr/local/bin/parrot first.\n".utf8
+            "couldn't locate the parrot binary. install it to /opt/homebrew/bin/parrot first.\n".utf8
         ))
         throw ExitCode(1)
     }

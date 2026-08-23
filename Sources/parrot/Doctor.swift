@@ -16,7 +16,7 @@ struct Check {
 }
 
 enum DoctorReport {
-    static func run(hotkey: Hotkey = .fn) -> [Check] {
+    static func run(hotkey: Hotkey = .backslash) -> [Check] {
         var checks = [
             checkMicrophone(hotkey: hotkey),
             checkAccessibility(),
@@ -27,7 +27,7 @@ enum DoctorReport {
         return checks
     }
 
-    static func checkMicrophone(hotkey: Hotkey = .fn) -> Check {
+    static func checkMicrophone(hotkey: Hotkey = .backslash) -> Check {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
         switch status {
         case .authorized:

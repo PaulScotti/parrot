@@ -16,6 +16,8 @@ final class HotkeyMonitor {
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var isPressed = false
+    private var isSuppressingKeyEvents = false
+    private var releasePollTimer: DispatchSourceTimer?
 
     init(hotkey: Hotkey, debug: Bool = false) {
         self.hotkey = hotkey
@@ -46,7 +48,7 @@ final class HotkeyMonitor {
             let tap = CGEvent.tapCreate(
                 tap: .cgSessionEventTap,
                 place: .headInsertEventTap,
-                options: .listenOnly,
+                options: hotkey.suppressesKeyEvents ? .defaultTap : .listenOnly,
                 eventsOfInterest: mask,
                 callback: hotkeyCallback,
                 userInfo: userInfo
@@ -72,6 +74,7 @@ final class HotkeyMonitor {
         }
         tap = nil
         runLoopSource = nil
+        stopReleasePolling()
         onEvent = nil
     }
 
@@ -85,15 +88,93 @@ final class HotkeyMonitor {
                         .utf8
                 ))
         }
-        guard type == .flagsChanged else { return }
         if let expectedKeycode = hotkey.keycode {
             let keycode = event.getIntegerValueField(.keyboardEventKeycode)
             guard keycode == expectedKeycode else { return }
         }
-        let pressed = event.flags.contains(hotkey.mask)
+
+        let pressed: Bool
+        if let modifierMask = hotkey.modifierMask {
+            guard type == .flagsChanged else { return }
+            pressed = event.flags.contains(modifierMask)
+        } else {
+            guard type == .keyDown || type == .keyUp else { return }
+            guard type == .keyUp || !hasShortcutModifiers(event.flags) else { return }
+            pressed = type == .keyDown
+        }
+
+        transition(to: pressed)
+    }
+
+    /// Active event taps can occasionally miss a key-up after suppressing a
+    /// printable key. Poll the HID state while Backslash is held so recording
+    /// always ends when the physical key is released.
+    private func startReleasePolling() {
+        guard releasePollTimer == nil, let keycode = hotkey.keycode else { return }
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(
+            deadline: .now() + .milliseconds(25),
+            repeating: .milliseconds(25),
+            leeway: .milliseconds(5)
+        )
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            let isDown = CGEventSource.keyState(.hidSystemState, key: CGKeyCode(keycode))
+            if !isDown {
+                self.transition(to: false)
+            }
+        }
+        releasePollTimer = timer
+        timer.resume()
+    }
+
+    private func stopReleasePolling() {
+        releasePollTimer?.cancel()
+        releasePollTimer = nil
+    }
+
+    private func transition(to pressed: Bool) {
         guard pressed != isPressed else { return }
         isPressed = pressed
+        if pressed, hotkey.modifierMask == nil {
+            startReleasePolling()
+        } else if !pressed {
+            stopReleasePolling()
+        }
         onEvent?(pressed ? .pressed : .released)
+    }
+
+    fileprivate func reenableTap() {
+        if let tap {
+            CGEvent.tapEnable(tap: tap, enable: true)
+        }
+    }
+
+    /// A printable push-to-talk key should not hijack Command/Option/Control
+    /// shortcuts or Shift-Backslash (the pipe character).
+    fileprivate func shouldSuppress(type: CGEventType, event: CGEvent) -> Bool {
+        guard hotkey.suppressesKeyEvents, type == .keyDown || type == .keyUp else {
+            return false
+        }
+        guard let keycode = hotkey.keycode,
+              event.getIntegerValueField(.keyboardEventKeycode) == keycode else {
+            return false
+        }
+        if type == .keyDown {
+            if isSuppressingKeyEvents { return true }
+            let suppress = !hasShortcutModifiers(event.flags)
+            if suppress { isSuppressingKeyEvents = true }
+            return suppress
+        }
+
+        let suppress = isSuppressingKeyEvents
+        isSuppressingKeyEvents = false
+        return suppress
+    }
+
+    private func hasShortcutModifiers(_ flags: CGEventFlags) -> Bool {
+        let shortcutFlags: CGEventFlags = [.maskShift, .maskControl, .maskAlternate, .maskCommand]
+        return !flags.intersection(shortcutFlags).isEmpty
     }
 }
 
@@ -107,16 +188,22 @@ private func hotkeyCallback(
     let monitor = Unmanaged<HotkeyMonitor>.fromOpaque(userInfo).takeUnretainedValue()
 
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-        // System disabled our tap; we'll need to re-enable. For now just no-op
-        // and let the user restart parrot.
+        monitor.reenableTap()
         return Unmanaged.passUnretained(event)
     }
 
+    let suppress = monitor.shouldSuppress(type: type, event: event)
     let copy = event.copy()
     DispatchQueue.main.async {
         if let copy {
             monitor.handle(type: type, event: copy)
         }
+    }
+    if suppress {
+        // Keep the hardware event sequence intact so macOS still delivers the
+        // matching key-up, but turn the printable event into a harmless null
+        // event before it reaches the focused application.
+        event.type = .null
     }
     return Unmanaged.passUnretained(event)
 }

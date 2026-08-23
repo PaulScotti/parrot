@@ -16,11 +16,8 @@ actor WhisperKitTranscriber: Transcriber {
     /// download/load.
     func warmUp() async throws {
         if pipeline != nil { return }
-        guard let whisperKitID = model.whisperKitID else {
-            throw TranscriberError.missingEngineID
-        }
         FileHandle.standardError.write(Data("loading \(model.id)...\n".utf8))
-        let config = WhisperKitConfig(model: whisperKitID, verbose: false, prewarm: true, load: true)
+        let config = WhisperKitConfig(model: model.engineID, verbose: false, prewarm: true, load: true)
         pipeline = try await WhisperKit(config)
         FileHandle.standardError.write(Data("✓ \(model.id) ready\n".utf8))
     }
@@ -54,6 +51,6 @@ actor WhisperKitTranscriber: Transcriber {
 }
 
 enum TranscriberError: Error {
-    case missingEngineID
+    case unsupportedEngineID(String)
     case notLoaded
 }

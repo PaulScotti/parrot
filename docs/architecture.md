@@ -3,7 +3,7 @@
 ## Goals
 
 1. **CLI executable.** Single binary, launched from the terminal. No menubar, no dock icon, no settings window.
-2. **Push-to-talk.** Hold Fn, speak, release — transcript appears at the cursor.
+2. **Push-to-talk.** Hold Backslash, speak, release; the transcript appears at the cursor.
 3. **Minimal recording feedback.** A small floating pill at the bottom of the screen while recording, so the user knows the mic is hot. Click-through, borderless, hidden when idle.
 4. **On-device.** No network calls for transcription. Audio never leaves the machine.
 5. **Pluggable models.** Whisper out of the box; Parakeet (or future engines) via a JSON-driven registry.
@@ -75,7 +75,7 @@ Subcommands:
 
 ### `HotkeyMonitor`
 
-Global hotkey via `CGEventTap` (requires Accessibility permission). Default: **hold Fn**. Detected via `flagsChanged` events with `CGEventFlags.maskSecondaryFn` or `CGEventFlags.maskControl`. Left and right Control share a modifier flag, so their physical keycodes disambiguate them. Emits `.pressed` / `.released`. Configurable as `fn`, `left-control`, or `right-control` via the `--hotkey` flag.
+Global hotkey via `CGEventTap` (requires Accessibility permission). Default: **hold Backslash**. Modifier hotkeys use `flagsChanged`; the printable `backslash` hotkey uses key-down and key-up events for ANSI keycode 42. Left and right Control share a modifier flag, so their physical keycodes disambiguate them. Parrot suppresses an unmodified backslash when selected, while allowing modified shortcuts and Shift-Backslash to pass through. Emits `.pressed` / `.released`. Configurable as `fn`, `left-control`, `right-control`, or `backslash` via the `--hotkey` flag.
 
 **Fn key caveat:** macOS by default maps the Fn (🌐) key to "Show Emoji & Symbols" or "Start Dictation" depending on the user's setting in System Settings → Keyboard → Press 🌐 key to. The CGEventTap sees the keypress regardless, but the system action also fires. `parrot doctor` will detect this setting and instruct the user to change it to "Do Nothing" so Fn becomes a clean modifier.
 
@@ -87,6 +87,7 @@ Global hotkey via `CGEventTap` (requires Accessibility permission). Default: **h
 
 ```swift
 protocol Transcriber {
+    func warmUp() async throws
     func transcribe(_ audio: [Float]) async throws -> String
     var modelID: String { get }
 }
@@ -156,7 +157,7 @@ Plain `Codable` struct. Loaded from (in order): CLI flags > `~/.config/parrot/co
 
 ```toml
 model = "whisper-large-v3-turbo"
-hotkey = "fn"
+hotkey = "backslash"
 inject_mode = "paste"   # or "type-unicode"
 overlay = true          # show recording pill at bottom of screen
 ```
@@ -186,21 +187,24 @@ Initial registry:
 
 | Engine | Model | Size | Notes |
 |---|---|---|---|
-| WhisperKit | `whisper-base.en` | ~80 MB | Fast, English only, low resource |
-| WhisperKit | `whisper-large-v3-turbo` | ~800 MB | Recommended for daily use |
-| Parakeet | `parakeet-tdt-0.6b-v3` | ~600 MB | English, fastest on ANE |
+| Parakeet | `parakeet-tdt-0.6b-v2` | ~452 MB | Recommended; English, punctuation, ANE |
+| WhisperKit | `whisper-base.en` | ~145 MB | Smaller English fallback |
+| WhisperKit | `whisper-small.en` | ~488 MB | More accurate Whisper fallback |
+| WhisperKit | `whisper-large-v3-turbo` | ~1.6 GB | Multilingual Whisper fallback |
 
-Models live in `~/Library/Application Support/parrot/models/`. Not bundled — fetched on first selection or via `parrot models download`.
+Models are not bundled. Each engine manages its own cache and fetches the selected model on first use or via `parrot models download`.
+
+Parakeet TDT 0.6B v2 is created by NVIDIA and distributed under the Creative Commons Attribution 4.0 license. Parrot uses FluidAudio's Core ML conversion and native Swift runtime.
 
 ## Data flow, end-to-end
 
 1. User runs `parrot` in a terminal.
 2. `ParrotCLI` validates permissions (`parrot doctor` logic), loads config, instantiates modules.
 3. Sets `.accessory` activation policy and enters `NSApp.run()`. Status: `listening`. Overlay hidden.
-4. User holds Fn.
+4. User holds Backslash.
 5. `HotkeyMonitor` fires `.pressed`. `RecordingOverlay` shows. Status: `recording`.
 6. `AudioCapture` starts the AVAudioEngine tap. Buffers fill. Overlay animates mic level.
-7. User releases Fn.
+7. User releases Backslash.
 8. `HotkeyMonitor` fires `.released`. Overlay switches to spinner. Status: `transcribing`.
 9. `AudioCapture` stops, hands buffer to active `Transcriber`.
 10. `Transcriber` runs CoreML inference. Returns string.

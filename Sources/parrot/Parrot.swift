@@ -34,8 +34,8 @@ struct Run: ParsableCommand {
     @Option(name: .long, help: "Model id to use. Defaults to the recommended model.")
     var model: String?
 
-    @Option(name: .long, help: "Push-to-talk key (fn, left-control, or right-control).")
-    var hotkey: Hotkey = .fn
+    @Option(name: .long, help: "Push-to-talk key (fn, left-control, right-control, or backslash).")
+    var hotkey: Hotkey = .backslash
 
     func run() throws {
         if !skipDoctor {
@@ -64,7 +64,7 @@ struct Run: ParsableCommand {
             chosenModel = m
         }
 
-        let transcriber = WhisperKitTranscriber(model: chosenModel)
+        let transcriber = TranscriberFactory.make(model: chosenModel)
         let warmupSemaphore = DispatchSemaphore(value: 0)
         var warmupError: Error?
         Task.detached {
@@ -186,8 +186,8 @@ struct Doctor: ParsableCommand {
         abstract: "Check microphone, accessibility, and hotkey configuration."
     )
 
-    @Option(name: .long, help: "Push-to-talk key (fn, left-control, or right-control).")
-    var hotkey: Hotkey = .fn
+    @Option(name: .long, help: "Push-to-talk key (fn, left-control, right-control, or backslash).")
+    var hotkey: Hotkey = .backslash
 
     func run() throws {
         let checks = DoctorReport.run(hotkey: hotkey)
@@ -225,7 +225,7 @@ struct Models: ParsableCommand {
                 print("unknown model: \(id)")
                 throw ExitCode(1)
             }
-            let t = WhisperKitTranscriber(model: m)
+            let t = TranscriberFactory.make(model: m)
 
             let sem = DispatchSemaphore(value: 0)
             var capturedError: Error?

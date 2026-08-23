@@ -11,16 +11,16 @@ enum ModelRegistry {
             id: "whisper-base.en",
             displayName: "Whisper Base (English)",
             engine: .whisperKit,
-            whisperKitID: "openai_whisper-base.en",
+            engineID: "openai_whisper-base.en",
             sizeMB: 145,
             languages: ["en"],
-            recommended: true
+            recommended: false
         ),
         TranscriptionModel(
             id: "whisper-large-v3-turbo",
             displayName: "Whisper Large v3 Turbo",
             engine: .whisperKit,
-            whisperKitID: "openai_whisper-large-v3-v20240930_turbo",
+            engineID: "openai_whisper-large-v3-v20240930_turbo",
             sizeMB: 1620,
             languages: ["multi"],
             recommended: false
@@ -29,10 +29,19 @@ enum ModelRegistry {
             id: "whisper-small.en",
             displayName: "Whisper Small (English)",
             engine: .whisperKit,
-            whisperKitID: "openai_whisper-small.en",
+            engineID: "openai_whisper-small.en",
             sizeMB: 488,
             languages: ["en"],
             recommended: false
+        ),
+        TranscriptionModel(
+            id: "parakeet-tdt-0.6b-v2",
+            displayName: "Parakeet TDT 0.6B v2 (English)",
+            engine: .parakeet,
+            engineID: "v2",
+            sizeMB: 452,
+            languages: ["en"],
+            recommended: true
         ),
     ]
 
