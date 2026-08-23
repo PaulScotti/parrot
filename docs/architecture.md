@@ -81,7 +81,7 @@ Global hotkey via `CGEventTap` (requires Accessibility permission). Default: **h
 
 ### `AudioCapture`
 
-`AVAudioEngine` tap on the input node. Streams 16 kHz mono `Float32` buffers into a ring buffer while the hotkey is held. On release, hands the full buffer to the active `Transcriber`.
+`AVAudioEngine` tap on the input node. Streams 16 kHz mono `Float32` buffers into a ring buffer while the hotkey is held. On release, hands the full buffer to the active `Transcriber`. Input selection is process-local: automatic mode uses the system input unless it is Bluetooth, in which case Parrot prefers the built-in microphone to avoid Bluetooth call-profile transitions.
 
 ### `Transcriber` (protocol)
 

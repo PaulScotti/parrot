@@ -13,7 +13,9 @@ final class AudioCapture {
     static let targetSampleRate: Double = 16_000
 
     private let engine = AVAudioEngine()
+    private let inputPreference: AudioInputPreference
     private var converter: AVAudioConverter?
+    private var selectedInput: AudioInputDevice?
     private var samples: [Float] = []
     private var isRecording = false
     private let lock = NSLock()
@@ -22,10 +24,29 @@ final class AudioCapture {
     /// Invoked on an arbitrary thread; hop to main if you touch UI.
     var onLevel: ((Float) -> Void)?
 
+    /// Called once when the process-specific input device is selected.
+    var onInputSelected: ((AudioInputDevice) -> Void)?
+
+    init(inputPreference: AudioInputPreference = .automatic) {
+        self.inputPreference = inputPreference
+    }
+
+    /// Resolve and attach the process-local input before the first recording.
+    /// This surfaces device problems at startup instead of on the first hold.
+    func prepare() throws {
+        guard selectedInput == nil else { return }
+        let input = engine.inputNode
+        let device = try AudioInputDevices.resolve(inputPreference)
+        try AudioInputDevices.select(device, on: input.audioUnit)
+        selectedInput = device
+        onInputSelected?(device)
+    }
+
     /// Begin recording. Idempotent — calling while already recording is a no-op.
     func start() throws {
         guard !isRecording else { return }
 
+        try prepare()
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
 

@@ -37,6 +37,12 @@ struct Run: ParsableCommand {
     @Option(name: .long, help: "Push-to-talk key (fn, left-control, right-control, or backslash).")
     var hotkey: Hotkey = .backslash
 
+    @Option(
+        name: .long,
+        help: "Microphone selection (automatic, system, or built-in). Automatic avoids Bluetooth call mode."
+    )
+    var inputDevice: AudioInputPreference = .automatic
+
     func run() throws {
         if !skipDoctor {
             let checks = DoctorReport.run(hotkey: hotkey)
@@ -85,11 +91,21 @@ struct Run: ParsableCommand {
         app.setActivationPolicy(.accessory)
 
         let monitor = HotkeyMonitor(hotkey: hotkey, debug: debugHotkey)
-        let capture = AudioCapture()
+        let capture = AudioCapture(inputPreference: inputDevice)
+        capture.onInputSelected = { device in
+            let fallback = device.isBluetooth ? "" : " · Bluetooth call mode avoided"
+            FileHandle.standardError.write(Data("audio input: \(device.name)\(fallback)\n".utf8))
+        }
         let dumpWav = self.dumpWav
         let overlay: RecordingOverlay? = noOverlay ? nil : MainActor.assumeIsolated { RecordingOverlay() }
         if let overlay {
             capture.onLevel = { level in overlay.pushLevel(level) }
+        }
+        do {
+            try capture.prepare()
+        } catch {
+            FileHandle.standardError.write(Data("audio input failed: \(error.localizedDescription)\n".utf8))
+            throw ExitCode(1)
         }
         let menuBar = MainActor.assumeIsolated {
             MenuBarController(modelID: chosenModel.id, hotkeyName: hotkey.displayName)

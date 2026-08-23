@@ -23,6 +23,12 @@ struct Install: ParsableCommand {
     @Option(name: .long, help: "Transcription model for the launch-at-login daemon.")
     var model: String?
 
+    @Option(
+        name: .long,
+        help: "Microphone selection for the launch-at-login daemon (automatic, system, or built-in)."
+    )
+    var inputDevice: AudioInputPreference = .automatic
+
     func run() throws {
         if launchAtLogin == uninstall {
             FileHandle.standardError.write(Data(
@@ -56,7 +62,13 @@ struct Install: ParsableCommand {
             throw ExitCode(1)
         }
 
-        var arguments = [binary, "run", "--skip-doctor", "--hotkey", hotkey.rawValue]
+        var arguments = [
+            binary,
+            "run",
+            "--skip-doctor",
+            "--hotkey", hotkey.rawValue,
+            "--input-device", inputDevice.rawValue,
+        ]
         if let model {
             arguments.append(contentsOf: ["--model", model])
         }
@@ -97,6 +109,7 @@ struct Install: ParsableCommand {
         print("  binary: \(binary)")
         print("  hotkey: \(hotkey.displayName)")
         print("  model:  \(model ?? "recommended")")
+        print("  input:  \(inputDevice.rawValue)")
         print("  logs:   /tmp/parrot.out.log, /tmp/parrot.err.log")
     }
 
