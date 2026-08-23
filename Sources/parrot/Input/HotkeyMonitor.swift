@@ -3,23 +3,22 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
-/// Watches a single modifier key (default: Fn) and emits press/release edges.
+/// Watches a single modifier key and emits press/release edges.
 /// Requires Accessibility permission. If the tap fails to register, callers
 /// will see an error from `start()`.
 final class HotkeyMonitor {
     enum Event { case pressed, released }
     enum HotkeyError: Error { case tapCreateFailed }
 
-    /// Mask of the modifier we treat as the hotkey. Fn = `.maskSecondaryFn`.
-    private let mask: CGEventFlags
+    private let hotkey: Hotkey
     private let debug: Bool
     private var onEvent: ((Event) -> Void)?
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var isPressed = false
 
-    init(mask: CGEventFlags = .maskSecondaryFn, debug: Bool = false) {
-        self.mask = mask
+    init(hotkey: Hotkey, debug: Bool = false) {
+        self.hotkey = hotkey
         self.debug = debug
     }
 
@@ -87,7 +86,11 @@ final class HotkeyMonitor {
                 ))
         }
         guard type == .flagsChanged else { return }
-        let pressed = event.flags.contains(mask)
+        if let expectedKeycode = hotkey.keycode {
+            let keycode = event.getIntegerValueField(.keyboardEventKeycode)
+            guard keycode == expectedKeycode else { return }
+        }
+        let pressed = event.flags.contains(hotkey.mask)
         guard pressed != isPressed else { return }
         isPressed = pressed
         onEvent?(pressed ? .pressed : .released)

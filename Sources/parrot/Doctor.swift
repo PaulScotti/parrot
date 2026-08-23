@@ -16,15 +16,18 @@ struct Check {
 }
 
 enum DoctorReport {
-    static func run() -> [Check] {
-        [
-            checkMicrophone(),
+    static func run(hotkey: Hotkey = .fn) -> [Check] {
+        var checks = [
+            checkMicrophone(hotkey: hotkey),
             checkAccessibility(),
-            checkFnKeyMapping(),
         ]
+        if hotkey == .fn {
+            checks.append(checkFnKeyMapping())
+        }
+        return checks
     }
 
-    static func checkMicrophone() -> Check {
+    static func checkMicrophone(hotkey: Hotkey = .fn) -> Check {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
         switch status {
         case .authorized:
@@ -33,7 +36,7 @@ enum DoctorReport {
             return Check(
                 name: "microphone",
                 status: .warn("not yet requested — will prompt on first recording"),
-                remediation: "run parrot and hold Fn once; macOS will prompt"
+                remediation: "run parrot and hold \(hotkey.displayName) once; macOS will prompt"
             )
         case .denied, .restricted:
             return Check(

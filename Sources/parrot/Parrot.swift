@@ -7,7 +7,7 @@ import WhisperKit
 struct Parrot: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "parrot",
-        abstract: "Minimal macOS dictation daemon. Hold Fn, speak, release.",
+        abstract: "Minimal macOS dictation daemon. Hold the hotkey, speak, release.",
         subcommands: [Run.self, Setup.self, Doctor.self, Models.self, Install.self],
         defaultSubcommand: Run.self
     )
@@ -34,9 +34,12 @@ struct Run: ParsableCommand {
     @Option(name: .long, help: "Model id to use. Defaults to the recommended model.")
     var model: String?
 
+    @Option(name: .long, help: "Push-to-talk key (fn, left-control, or right-control).")
+    var hotkey: Hotkey = .fn
+
     func run() throws {
         if !skipDoctor {
-            let checks = DoctorReport.run()
+            let checks = DoctorReport.run(hotkey: hotkey)
             if !DoctorReport.allOK(checks) {
                 FileHandle.standardError.write(Data("startup checks failed:\n".utf8))
                 DoctorReport.print(checks)
@@ -81,14 +84,16 @@ struct Run: ParsableCommand {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
 
-        let monitor = HotkeyMonitor(debug: debugHotkey)
+        let monitor = HotkeyMonitor(hotkey: hotkey, debug: debugHotkey)
         let capture = AudioCapture()
         let dumpWav = self.dumpWav
         let overlay: RecordingOverlay? = noOverlay ? nil : MainActor.assumeIsolated { RecordingOverlay() }
         if let overlay {
             capture.onLevel = { level in overlay.pushLevel(level) }
         }
-        let menuBar = MainActor.assumeIsolated { MenuBarController(modelID: chosenModel.id) }
+        let menuBar = MainActor.assumeIsolated {
+            MenuBarController(modelID: chosenModel.id, hotkeyName: hotkey.displayName)
+        }
 
         do {
             try monitor.start { event in
@@ -169,18 +174,23 @@ struct Run: ParsableCommand {
         sigint.resume()
         signal(SIGINT, SIG_IGN)
 
-        FileHandle.standardError.write(Data("listening on fn hold · model: \(chosenModel.id) · ^C to quit\n".utf8))
+        FileHandle.standardError.write(Data(
+            "listening on \(hotkey.displayName.lowercased()) hold · model: \(chosenModel.id) · ^C to quit\n".utf8
+        ))
         app.run()
     }
 }
 
 struct Doctor: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Check microphone, accessibility, and Fn key configuration."
+        abstract: "Check microphone, accessibility, and hotkey configuration."
     )
 
+    @Option(name: .long, help: "Push-to-talk key (fn, left-control, or right-control).")
+    var hotkey: Hotkey = .fn
+
     func run() throws {
-        let checks = DoctorReport.run()
+        let checks = DoctorReport.run(hotkey: hotkey)
         DoctorReport.print(checks)
         if !DoctorReport.allOK(checks) {
             throw ExitCode(1)

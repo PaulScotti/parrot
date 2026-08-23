@@ -9,15 +9,21 @@ final class MenuBarController {
     private let modelLabel: NSMenuItem
     private let stateLabel: NSMenuItem
     private let modelID: String
+    private let hotkeyName: String
 
-    init(modelID: String) {
+    init(modelID: String, hotkeyName: String) {
         self.modelID = modelID
+        self.hotkeyName = hotkeyName.lowercased()
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        stateLabel = NSMenuItem(title: "idle · hold fn to dictate", action: nil, keyEquivalent: "")
+        stateLabel = NSMenuItem(
+            title: "idle · hold \(self.hotkeyName) to dictate",
+            action: nil,
+            keyEquivalent: ""
+        )
         stateLabel.isEnabled = false
         menu.addItem(stateLabel)
 
@@ -41,7 +47,7 @@ final class MenuBarController {
 
     func setRecording(_ recording: Bool) {
         configureButton(recording: recording)
-        stateLabel.title = recording ? "● recording" : "idle · hold fn to dictate"
+        stateLabel.title = recording ? "● recording" : "idle · hold \(hotkeyName) to dictate"
     }
 
     func setTranscribing() {

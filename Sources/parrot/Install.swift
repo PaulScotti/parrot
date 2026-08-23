@@ -17,6 +17,9 @@ struct Install: ParsableCommand {
     @Flag(name: .long, help: "Remove the launch-at-login agent.")
     var uninstall: Bool = false
 
+    @Option(name: .long, help: "Push-to-talk key for the launch-at-login daemon.")
+    var hotkey: Hotkey = .fn
+
     func run() throws {
         if launchAtLogin == uninstall {
             FileHandle.standardError.write(Data(
@@ -48,7 +51,7 @@ struct Install: ParsableCommand {
 
         let plist: [String: Any] = [
             "Label": Self.label,
-            "ProgramArguments": [binary, "run", "--skip-doctor"],
+            "ProgramArguments": [binary, "run", "--skip-doctor", "--hotkey", hotkey.rawValue],
             "RunAtLoad": true,
             "KeepAlive": ["SuccessfulExit": false] as [String: Any],
             "ProcessType": "Interactive",
@@ -80,6 +83,7 @@ struct Install: ParsableCommand {
         print("✓ launch-at-login installed")
         print("  plist:  \(url.path)")
         print("  binary: \(binary)")
+        print("  hotkey: \(hotkey.displayName)")
         print("  logs:   /tmp/parrot.out.log, /tmp/parrot.err.log")
     }
 

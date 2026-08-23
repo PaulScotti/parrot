@@ -37,7 +37,7 @@ No menubar, no dock icon, no app bundle, no settings window, no launch-at-login.
 ```sh
 parrot                                 # run with defaults (fn hold, whisper-base.en)
 parrot --model whisper-large-v3-turbo  # bigger, multilingual, slower first-run
-parrot --hotkey right-option        # change hotkey
+parrot --hotkey left-control        # use left Control instead of Fn
 parrot --no-overlay                 # disable bottom-of-screen pill
 parrot models list                  # list available models
 parrot models download <id>         # pre-download a model
@@ -45,6 +45,10 @@ parrot doctor                       # check permissions + Fn key setting
 parrot install --launch-at-login    # register a LaunchAgent
 parrot install --uninstall          # remove the LaunchAgent
 ```
+
+For launch-at-login, persist the choice in the LaunchAgent with
+`parrot install --launch-at-login --hotkey left-control`. The left/right
+choices are separate, so the other Control key remains available for shortcuts.
 
 ## Status
 
