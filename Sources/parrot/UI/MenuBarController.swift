@@ -10,17 +10,22 @@ final class MenuBarController {
     private let stateLabel: NSMenuItem
     private let modelID: String
     private let hotkeyName: String
+    private let supportsHandsFree: Bool
 
-    init(modelID: String, hotkeyName: String) {
+    init(modelID: String, hotkeyName: String, supportsHandsFree: Bool) {
         self.modelID = modelID
         self.hotkeyName = hotkeyName.lowercased()
+        self.supportsHandsFree = supportsHandsFree
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         let menu = NSMenu()
         menu.autoenablesItems = false
 
         stateLabel = NSMenuItem(
-            title: "idle · hold \(self.hotkeyName) to dictate",
+            title: Self.idleTitle(
+                hotkeyName: self.hotkeyName,
+                supportsHandsFree: supportsHandsFree
+            ),
             action: nil,
             keyEquivalent: ""
         )
@@ -47,11 +52,23 @@ final class MenuBarController {
 
     func setRecording(_ recording: Bool) {
         configureButton(recording: recording)
-        stateLabel.title = recording ? "● recording" : "idle · hold \(hotkeyName) to dictate"
+        stateLabel.title = recording
+            ? "● recording · release to stop"
+            : Self.idleTitle(hotkeyName: hotkeyName, supportsHandsFree: supportsHandsFree)
+    }
+
+    func setHandsFreeRecording() {
+        configureButton(recording: true)
+        stateLabel.title = "● hands-free recording · tap \(hotkeyName) to stop"
     }
 
     func setTranscribing() {
         stateLabel.title = "transcribing…"
+    }
+
+    private static func idleTitle(hotkeyName: String, supportsHandsFree: Bool) -> String {
+        let gesture = supportsHandsFree ? "hold or double-tap" : "hold"
+        return "idle · \(gesture) \(hotkeyName) to dictate"
     }
 
     private func configureButton(recording: Bool) {

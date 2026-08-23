@@ -7,7 +7,7 @@ $ parrot
 listening on backslash hold · model: parakeet-tdt-0.6b-v2 · ^C to quit
 ```
 
-That's it. Hold Backslash, speak, release. Text appears at the cursor in whatever app is focused. A small pill at the bottom of the screen shows when the mic is hot.
+That's it. Hold Backslash, speak, release. Or double-tap Backslash for hands-free dictation, then tap it once to stop. Text appears at the cursor in whatever app is focused. A small pill at the bottom of the screen shows when the mic is hot.
 
 ## Install
 
@@ -55,6 +55,11 @@ For launch-at-login, persist the choice in the LaunchAgent with
 `parrot install --launch-at-login --hotkey backslash`. Parrot suppresses the
 unmodified `\` while it is the push-to-talk key, but modified shortcuts and
 Shift-`\` continue to work normally.
+
+Backslash also supports a hands-free latch. Double-tap it and Parrot keeps
+recording after the second release; tap Backslash once more to stop and
+transcribe. A longer press is always treated as the original hold-to-talk
+gesture, so ordinary push-to-talk behavior is unchanged.
 
 By default, `automatic` follows the system microphone unless it is Bluetooth.
 When a Bluetooth headset is the default input, Parrot instead opens the Mac's

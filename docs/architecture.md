@@ -3,7 +3,7 @@
 ## Goals
 
 1. **CLI executable.** Single binary, launched from the terminal. No menubar, no dock icon, no settings window.
-2. **Push-to-talk.** Hold Backslash, speak, release; the transcript appears at the cursor.
+2. **Push-to-talk or latch.** Hold Backslash and release, or double-tap it for hands-free dictation and tap once to stop; the transcript appears at the cursor.
 3. **Minimal recording feedback.** A small floating pill at the bottom of the screen while recording, so the user knows the mic is hot. Click-through, borderless, hidden when idle.
 4. **On-device.** No network calls for transcription. Audio never leaves the machine.
 5. **Pluggable models.** Whisper out of the box; Parakeet (or future engines) via a JSON-driven registry.
@@ -75,7 +75,7 @@ Subcommands:
 
 ### `HotkeyMonitor`
 
-Global hotkey via `CGEventTap` (requires Accessibility permission). Default: **hold Backslash**. Modifier hotkeys use `flagsChanged`; the printable `backslash` hotkey uses key-down and key-up events for ANSI keycode 42. Left and right Control share a modifier flag, so their physical keycodes disambiguate them. Parrot suppresses an unmodified backslash when selected, while allowing modified shortcuts and Shift-Backslash to pass through. Emits `.pressed` / `.released`. Configurable as `fn`, `left-control`, `right-control`, or `backslash` via the `--hotkey` flag.
+Global hotkey via `CGEventTap` (requires Accessibility permission). Default: **hold Backslash**, with a double-tap latch for hands-free dictation. Modifier hotkeys use `flagsChanged`; the printable `backslash` hotkey uses key-down and key-up events for ANSI keycode 42. Left and right Control share a modifier flag, so their physical keycodes disambiguate them. Parrot suppresses an unmodified backslash when selected, while allowing modified shortcuts and Shift-Backslash to pass through. A press longer than 250 ms remains ordinary push-to-talk. Two brief taps within 400 ms latch recording until the next Backslash press. Configurable as `fn`, `left-control`, `right-control`, or `backslash` via the `--hotkey` flag.
 
 **Fn key caveat:** macOS by default maps the Fn (🌐) key to "Show Emoji & Symbols" or "Start Dictation" depending on the user's setting in System Settings → Keyboard → Press 🌐 key to. The CGEventTap sees the keypress regardless, but the system action also fires. `parrot doctor` will detect this setting and instruct the user to change it to "Do Nothing" so Fn becomes a clean modifier.
 

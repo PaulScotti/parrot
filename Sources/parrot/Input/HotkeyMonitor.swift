@@ -7,7 +7,11 @@ import Foundation
 /// Requires Accessibility permission. If the tap fails to register, callers
 /// will see an error from `start()`.
 final class HotkeyMonitor {
-    enum Event { case pressed, released }
+    enum Event {
+        case recordingStarted
+        case recordingStopped
+        case handsFreeStarted
+    }
     enum HotkeyError: Error { case tapCreateFailed }
 
     private let hotkey: Hotkey
@@ -18,6 +22,9 @@ final class HotkeyMonitor {
     private var isPressed = false
     private var isSuppressingKeyEvents = false
     private var releasePollTimer: DispatchSourceTimer?
+    private var backslashActivation = BackslashActivation()
+    private var tapTimeoutGeneration = 0
+    private let doubleTapWindow: TimeInterval = 0.40
 
     init(hotkey: Hotkey, debug: Bool = false) {
         self.hotkey = hotkey
@@ -75,6 +82,9 @@ final class HotkeyMonitor {
         tap = nil
         runLoopSource = nil
         stopReleasePolling()
+        tapTimeoutGeneration += 1
+        backslashActivation.reset()
+        isPressed = false
         onEvent = nil
     }
 
@@ -141,7 +151,45 @@ final class HotkeyMonitor {
         } else if !pressed {
             stopReleasePolling()
         }
-        onEvent?(pressed ? .pressed : .released)
+        handleActivationEdge(pressed: pressed)
+    }
+
+    private func handleActivationEdge(pressed: Bool) {
+        // Double-tap latching is intentionally limited to Backslash. Modifier
+        // hotkeys retain their exact push-to-talk behavior.
+        guard hotkey == .backslash else {
+            onEvent?(pressed ? .recordingStarted : .recordingStopped)
+            return
+        }
+
+        tapTimeoutGeneration += 1
+        let now = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
+        let action = backslashActivation.handle(pressed: pressed, at: now)
+        if backslashActivation.state == .waitingForSecondTap {
+            scheduleSingleTapStop(generation: tapTimeoutGeneration)
+        }
+        emit(action)
+    }
+
+    private func scheduleSingleTapStop(generation: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + doubleTapWindow) { [weak self] in
+            guard let self,
+                  self.tapTimeoutGeneration == generation else { return }
+            self.emit(self.backslashActivation.singleTapTimedOut())
+        }
+    }
+
+    private func emit(_ action: BackslashActivation.Action?) {
+        switch action {
+        case .startRecording:
+            onEvent?(.recordingStarted)
+        case .stopRecording:
+            onEvent?(.recordingStopped)
+        case .handsFreeStarted:
+            onEvent?(.handsFreeStarted)
+        case nil:
+            break
+        }
     }
 
     fileprivate func reenableTap() {

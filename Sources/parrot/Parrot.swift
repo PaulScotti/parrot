@@ -108,13 +108,17 @@ struct Run: ParsableCommand {
             throw ExitCode(1)
         }
         let menuBar = MainActor.assumeIsolated {
-            MenuBarController(modelID: chosenModel.id, hotkeyName: hotkey.displayName)
+            MenuBarController(
+                modelID: chosenModel.id,
+                hotkeyName: hotkey.displayName,
+                supportsHandsFree: hotkey == .backslash
+            )
         }
 
         do {
             try monitor.start { event in
                 switch event {
-                case .pressed:
+                case .recordingStarted:
                     do {
                         try capture.start()
                         FileHandle.standardError.write(Data("● recording\n".utf8))
@@ -125,7 +129,14 @@ struct Run: ParsableCommand {
                     } catch {
                         FileHandle.standardError.write(Data("capture failed: \(error)\n".utf8))
                     }
-                case .released:
+                case .handsFreeStarted:
+                    FileHandle.standardError.write(Data(
+                        "↔ hands-free recording · tap backslash to stop\n".utf8
+                    ))
+                    MainActor.assumeIsolated {
+                        menuBar.setHandsFreeRecording()
+                    }
+                case .recordingStopped:
                     let samples = capture.stop()
                     MainActor.assumeIsolated {
                         overlay?.show(.transcribing)
@@ -190,8 +201,9 @@ struct Run: ParsableCommand {
         sigint.resume()
         signal(SIGINT, SIG_IGN)
 
+        let gesture = hotkey == .backslash ? "hold or double-tap" : "hold"
         FileHandle.standardError.write(Data(
-            "listening on \(hotkey.displayName.lowercased()) hold · model: \(chosenModel.id) · ^C to quit\n".utf8
+            "listening on \(hotkey.displayName.lowercased()) \(gesture) · model: \(chosenModel.id) · ^C to quit\n".utf8
         ))
         app.run()
     }
