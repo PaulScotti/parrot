@@ -1,80 +1,106 @@
 # parrot
 
-A minimal macOS dictation daemon. CLI-launched, push-to-talk, on-device transcription, text inserted at the cursor.
+Paul Scotti's fork of [digimata/parrot](https://github.com/digimata/parrot), a
+minimal, fully local macOS dictation daemon. Hold a key, speak, release, and the
+transcript appears at the cursor in any app.
+
+This fork is optimized for Backslash dictation on Apple Silicon Macs:
+
+- Backslash is the default push-to-talk key.
+- Hold Backslash for ordinary push-to-talk dictation.
+- Double-tap Backslash for hands-free dictation, then tap once to stop.
+- NVIDIA Parakeet TDT 0.6B v2 is the default model, using FluidAudio and Core ML.
+- Bluetooth microphones are avoided automatically when a built-in Mac microphone
+  is available, preventing headset call-mode transitions and "call ended" alerts.
+- Shift-Backslash and modified shortcuts continue to work normally.
+- A release-state fallback prevents a missed key-up from leaving recording active.
+
+## Requirements
+
+- macOS 14 or later
+- Apple Silicon, M1 or newer
+- Internet access for the first model download, approximately 452 MB
+- Xcode Command Line Tools only if building from source
+
+## Install the prebuilt release
 
 ```sh
-$ parrot
-listening on backslash hold · model: parakeet-tdt-0.6b-v2 · ^C to quit
-```
-
-That's it. Hold Backslash, speak, release. Or double-tap Backslash for hands-free dictation, then tap it once to stop. Text appears at the cursor in whatever app is focused. A small pill at the bottom of the screen shows when the mic is hot.
-
-## Install
-
-```sh
-curl -fsSL https://digimata.github.io/parrot/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/PaulScotti/parrot/main/scripts/install.sh | sh
 parrot setup
-parrot install --launch-at-login   # optional
+parrot install --launch-at-login \
+  --hotkey backslash \
+  --model parakeet-tdt-0.6b-v2 \
+  --input-device automatic
 ```
 
-**Requires:** macOS 14+ on Apple Silicon (M1 or newer). Transcription runs on the Apple Neural Engine via CoreML — so the installer refuses to run on Intel.
+The installer places the binary at `/usr/local/bin/parrot`. The launch agent
+starts Parrot at login and keeps it running in the background.
 
-The installer drops the binary in `/usr/local/bin/parrot`. Builds are unsigned for now, so the installer strips the quarantine xattr — once you've inspected the script you'll see exactly what it does.
+On first setup, grant `parrot` Microphone and Accessibility access in System
+Settings. If macOS retains an obsolete Accessibility row after an update,
+remove that row and add `/usr/local/bin/parrot` again.
+
+## Build from source
+
+Install Apple's command-line developer tools if `swift --version` is not
+available:
+
+```sh
+xcode-select --install
+```
+
+Then clone, build, and install:
+
+```sh
+git clone https://github.com/PaulScotti/parrot.git
+cd parrot
+swift build -c release
+sudo mkdir -p /usr/local/bin
+sudo install -m 755 .build/release/parrot /usr/local/bin/parrot
+parrot setup
+parrot install --launch-at-login \
+  --hotkey backslash \
+  --model parakeet-tdt-0.6b-v2 \
+  --input-device automatic
+```
+
+## How to use
+
+1. Click into any text field.
+2. Either hold Backslash while speaking and release it, or double-tap Backslash
+   to start hands-free dictation.
+3. When hands-free dictation is active, tap Backslash once to stop.
+4. Parrot transcribes locally and inserts the text at the cursor.
+
+The menu-bar item and recording pill show whether Parrot is recording or
+transcribing.
+
+## Useful commands
+
+```sh
+parrot                                  # run in the foreground
+parrot setup                            # configure permissions
+parrot doctor                           # check permissions and hotkey setup
+parrot models list                      # list available models
+parrot models download parakeet-tdt-0.6b-v2
+parrot --input-device system            # intentionally use the default mic
+parrot --input-device built-in          # always use the Mac microphone
+parrot install --uninstall              # remove the launch agent
+```
+
+`--input-device automatic` follows the system input unless it is Bluetooth. If
+the default input is Bluetooth and the Mac has a built-in microphone, Parrot
+uses the built-in microphone only for its own process. The system-wide input
+and the headset output remain unchanged.
 
 ## Stack
 
-- **Swift** — single SPM executable target
-- **FluidAudio**: Parakeet inference via CoreML, ANE-accelerated
-- **WhisperKit**: optional Whisper inference via CoreML, ANE-accelerated
-- **AVAudioEngine** — mic capture
-- **CGEventTap** — global hotkey
-- **CGEvent** — text injection at cursor
-- **NSWindow** (borderless, click-through) — recording-indicator pill at bottom of screen
+- Swift and Swift Package Manager
+- FluidAudio with Parakeet TDT 0.6B v2 through Core ML
+- WhisperKit as an optional fallback
+- AVAudioEngine for microphone capture
+- CGEventTap for the global hotkey
+- CGEvent for text insertion
 
-No menubar, no dock icon, no app bundle, no settings window, no launch-at-login. If you want it always running, run it under `launchd` yourself or leave a terminal tab open.
-
-## Usage 
-
-```sh
-parrot                                 # run with defaults (Backslash hold, Parakeet v2)
-parrot --model whisper-base.en         # retain Whisper Base as a fallback
-parrot --model whisper-large-v3-turbo  # bigger, multilingual, slower first-run
-parrot --hotkey backslash           # use the unmodified \ key; Shift-\ still types |
-parrot --input-device automatic     # avoid Bluetooth call mode when possible
-parrot --input-device system        # explicitly use the system-default microphone
-parrot --input-device built-in      # always use the Mac's built-in microphone
-parrot --no-overlay                 # disable bottom-of-screen pill
-parrot models list                  # list available models
-parrot models download <id>         # pre-download a model
-parrot doctor                       # check permissions + Fn key setting
-parrot install --launch-at-login --hotkey backslash --model parakeet-tdt-0.6b-v2 --input-device built-in
-parrot install --uninstall          # remove the LaunchAgent
-```
-
-For launch-at-login, persist the choice in the LaunchAgent with
-`parrot install --launch-at-login --hotkey backslash`. Parrot suppresses the
-unmodified `\` while it is the push-to-talk key, but modified shortcuts and
-Shift-`\` continue to work normally.
-
-Backslash also supports a hands-free latch. Double-tap it and Parrot keeps
-recording after the second release; tap Backslash once more to stop and
-transcribe. A longer press is always treated as the original hold-to-talk
-gesture, so ordinary push-to-talk behavior is unchanged.
-
-By default, `automatic` follows the system microphone unless it is Bluetooth.
-When a Bluetooth headset is the default input, Parrot instead opens the Mac's
-built-in microphone without changing the system-wide input setting. This avoids
-headset call-mode transitions and their "call ended" announcements. Pass
-`--input-device system` if you intentionally want to dictate through the
-headset microphone.
-
-## Status
-
-M0 complete (skeleton builds, daemon runs, SIGINT exits cleanly). See [docs/architecture.md](docs/architecture.md) for design and [.plan/plan.md](.plan/plan.md) for milestones.
-
-## Build
-
-```sh
-swift build
-.build/debug/parrot --help
-```
+See [docs/architecture.md](docs/architecture.md) for implementation details.
+The upstream project and this fork are distributed under the [MIT License](LICENSE).

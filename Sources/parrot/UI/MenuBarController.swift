@@ -47,18 +47,16 @@ final class MenuBarController {
         menu.addItem(quit)
 
         statusItem.menu = menu
-        configureButton(recording: false)
+        configureButton()
     }
 
     func setRecording(_ recording: Bool) {
-        configureButton(recording: recording)
         stateLabel.title = recording
             ? "● recording · release to stop"
             : Self.idleTitle(hotkeyName: hotkeyName, supportsHandsFree: supportsHandsFree)
     }
 
     func setHandsFreeRecording() {
-        configureButton(recording: true)
         stateLabel.title = "● hands-free recording · tap \(hotkeyName) to stop"
     }
 
@@ -71,12 +69,11 @@ final class MenuBarController {
         return "idle · \(gesture) \(hotkeyName) to dictate"
     }
 
-    private func configureButton(recording: Bool) {
+    private func configureButton() {
         guard let button = statusItem.button else { return }
         let image = Self.birdImage()
-        image?.isTemplate = !recording
+        image?.isTemplate = true
         button.image = image
-        button.contentTintColor = recording ? NSColor.systemRed : nil
     }
 
     // Inlined Lucide bird SVG. Keeping it in source means the executable has
