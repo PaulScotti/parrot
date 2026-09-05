@@ -29,6 +29,9 @@ struct Install: ParsableCommand {
     )
     var inputDevice: AudioInputPreference = .automatic
 
+    @Option(name: .long, help: "Folder containing Parrot models, runtime files, and scripts.")
+    var home: String?
+
     func run() throws {
         if launchAtLogin == uninstall {
             FileHandle.standardError.write(Data(
@@ -57,6 +60,14 @@ struct Install: ParsableCommand {
 
     private func writeAgent() throws {
         let binary = try resolveBinaryPath()
+        let parrotHome = URL(
+            fileURLWithPath: home ?? ParrotPaths.home.path,
+            isDirectory: true
+        ).standardizedFileURL
+        try FileManager.default.createDirectory(
+            at: parrotHome.appendingPathComponent("runtime/logs", isDirectory: true),
+            withIntermediateDirectories: true
+        )
         if let model, ModelRegistry.find(model) == nil {
             FileHandle.standardError.write(Data("unknown model: \(model)\n".utf8))
             throw ExitCode(1)
@@ -79,8 +90,17 @@ struct Install: ParsableCommand {
             "RunAtLoad": true,
             "KeepAlive": ["SuccessfulExit": false] as [String: Any],
             "ProcessType": "Interactive",
-            "StandardOutPath": "/tmp/parrot.out.log",
-            "StandardErrorPath": "/tmp/parrot.err.log",
+            "StandardOutPath": parrotHome.appendingPathComponent("runtime/logs/parrot.out.log").path,
+            "StandardErrorPath": parrotHome.appendingPathComponent("runtime/logs/parrot.err.log").path,
+            "EnvironmentVariables": [
+                "PARROT_HOME": parrotHome.path,
+                "HF_HOME": parrotHome.appendingPathComponent("models/huggingface").path,
+                "HF_HUB_CACHE": parrotHome.appendingPathComponent("models/huggingface/hub").path,
+                "XDG_CACHE_HOME": parrotHome.appendingPathComponent("runtime/caches").path,
+                "HF_HUB_DISABLE_PROGRESS_BARS": "1",
+                "PYTHONUNBUFFERED": "1",
+                "TOKENIZERS_PARALLELISM": "false",
+            ],
         ]
 
         let url = plistURL
@@ -110,7 +130,8 @@ struct Install: ParsableCommand {
         print("  hotkey: \(hotkey.displayName)")
         print("  model:  \(model ?? "recommended")")
         print("  input:  \(inputDevice.rawValue)")
-        print("  logs:   /tmp/parrot.out.log, /tmp/parrot.err.log")
+        print("  home:   \(parrotHome.path)")
+        print("  logs:   \(parrotHome.appendingPathComponent("runtime/logs").path)")
     }
 
     private func removeAgent() throws {

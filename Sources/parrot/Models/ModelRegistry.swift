@@ -41,6 +41,15 @@ enum ModelRegistry {
             engineID: "v2",
             sizeMB: 452,
             languages: ["en"],
+            recommended: false
+        ),
+        TranscriptionModel(
+            id: "qwen3-asr-1.7b-mlx-8bit",
+            displayName: "Qwen3-ASR 1.7B MLX 8-bit",
+            engine: .qwenMLX,
+            engineID: "mlx-community/Qwen3-ASR-1.7B-8bit",
+            sizeMB: 2470,
+            languages: ["multi"],
             recommended: true
         ),
     ]

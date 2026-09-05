@@ -6,3 +6,9 @@
 
 # kdb auto-rendered task index (regenerate with `kdb render`)
 .tasks/
+
+# Local model/runtime data and packaged artifacts.
+/artifacts/
+/models/
+/runtime/
+/LOCAL_SETUP.md

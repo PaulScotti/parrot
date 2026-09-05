@@ -37,8 +37,12 @@ jobs:
         run: |
           BIN=.build/arm64-apple-macosx/release/parrot
           file "$BIN"
-          mkdir -p dist
+          mkdir -p dist/scripts
           cp "$BIN" dist/parrot
+          cp scripts/qwen_mlx_worker.py dist/scripts/
+          cp scripts/qwen-mlx-requirements.lock dist/scripts/
+          cp scripts/setup-qwen-mlx.sh dist/scripts/
+          chmod +x dist/scripts/qwen_mlx_worker.py dist/scripts/setup-qwen-mlx.sh
 
       - name: strip
         run: strip -x dist/parrot
@@ -46,7 +50,7 @@ jobs:
       - name: package
         run: |
           cd dist
-          tar -czf parrot-macos-arm64.tar.gz parrot
+          tar -czf parrot-macos-arm64.tar.gz parrot scripts
           shasum -a 256 parrot-macos-arm64.tar.gz > parrot-macos-arm64.tar.gz.sha256
           ls -lh
 

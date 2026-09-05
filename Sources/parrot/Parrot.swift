@@ -259,6 +259,7 @@ struct Models: ParsableCommand {
             var capturedError: Error?
             Task.detached {
                 do { try await t.warmUp() } catch { capturedError = error }
+                await t.shutDown()
                 sem.signal()
             }
             sem.wait()

@@ -2,18 +2,22 @@
 # parrot installer.
 #   curl -fsSL https://raw.githubusercontent.com/PaulScotti/parrot/main/scripts/install.sh | sh
 #
-# Fetches the latest arm64 macOS binary from GitHub Releases, drops it
-# in /usr/local/bin, and strips the quarantine xattr so Gatekeeper doesn't
-# block the unsigned binary.
+# Fetches the latest arm64 macOS release, installs the binary and Qwen MLX
+# support scripts, then prepares the isolated local model runtime.
 #
-# Apple Silicon only — WhisperKit uses the Apple Neural Engine via CoreML,
-# which only ships on M-series chips.
+# Apple Silicon only. MLX runs Qwen3-ASR on Apple unified memory.
 
 set -euo pipefail
 
 REPO="PaulScotti/parrot"
 BIN_NAME="parrot"
-INSTALL_DIR="/usr/local/bin"
+if [ -d "/opt/homebrew/bin" ]; then
+    DEFAULT_INSTALL_DIR="/opt/homebrew/bin"
+else
+    DEFAULT_INSTALL_DIR="/usr/local/bin"
+fi
+INSTALL_DIR="${PARROT_INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
+PARROT_HOME="${PARROT_HOME:-$HOME/Library/Application Support/Parrot}"
 ASSET="parrot-macos-arm64.tar.gz"
 
 red()    { printf "\033[31m%s\033[0m\n" "$*" >&2; }
@@ -29,7 +33,7 @@ fi
 ARCH=$(uname -m)
 if [ "$ARCH" != "arm64" ]; then
     red "parrot requires Apple Silicon (detected $ARCH)"
-    red "the on-device inference engine uses the Apple Neural Engine, which Intel Macs don't have."
+    red "the on-device MLX inference engine does not support Intel Macs."
     exit 1
 fi
 
@@ -65,12 +69,13 @@ curl -fsSL "$URL" -o "$TMP/${ASSET}"
 dim "→ extracting..."
 tar -xzf "$TMP/${ASSET}" -C "$TMP"
 
-if [ ! -f "$TMP/${BIN_NAME}" ]; then
-    red "archive did not contain ${BIN_NAME}"
+if [ ! -f "$TMP/${BIN_NAME}" ] || [ ! -f "$TMP/scripts/setup-qwen-mlx.sh" ]; then
+    red "archive did not contain the parrot binary and Qwen MLX support files"
     exit 1
 fi
 
 chmod +x "$TMP/${BIN_NAME}"
+chmod +x "$TMP/scripts/qwen_mlx_worker.py" "$TMP/scripts/setup-qwen-mlx.sh"
 
 # 4. strip quarantine so Gatekeeper lets the unsigned binary run
 xattr -d com.apple.quarantine "$TMP/${BIN_NAME}" 2>/dev/null || true
@@ -89,9 +94,31 @@ dim "→ installing to ${INSTALL_DIR}/${BIN_NAME}..."
 $SUDO mv "$TMP/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
 $SUDO chmod +x "${INSTALL_DIR}/${BIN_NAME}"
 
+dim "→ installing Qwen MLX support files in ${PARROT_HOME}/scripts..."
+mkdir -p "$PARROT_HOME/scripts"
+cp "$TMP/scripts/qwen_mlx_worker.py" "$PARROT_HOME/scripts/"
+cp "$TMP/scripts/qwen-mlx-requirements.lock" "$PARROT_HOME/scripts/"
+cp "$TMP/scripts/setup-qwen-mlx.sh" "$PARROT_HOME/scripts/"
+chmod +x "$PARROT_HOME/scripts/qwen_mlx_worker.py" "$PARROT_HOME/scripts/setup-qwen-mlx.sh"
+
+if ! command -v uv >/dev/null 2>&1; then
+    if command -v brew >/dev/null 2>&1; then
+        dim "→ installing the uv Python runtime manager..."
+        brew install uv
+    else
+        red "uv is required for the Qwen MLX runtime."
+        red "Install Homebrew from https://brew.sh, then rerun this installer."
+        exit 1
+    fi
+fi
+
+dim "→ preparing Qwen3-ASR 1.7B MLX 8-bit..."
+PARROT_HOME="$PARROT_HOME" "$PARROT_HOME/scripts/setup-qwen-mlx.sh"
+
 green "✓ parrot ${TAG} installed at ${INSTALL_DIR}/${BIN_NAME}"
+green "✓ Qwen runtime installed at ${PARROT_HOME}"
 echo
 echo "next:"
 echo "  parrot setup                       # grant mic + accessibility"
-echo "  parrot install --launch-at-login   # (optional) start at login"
+echo "  parrot install --launch-at-login --hotkey backslash --model qwen3-asr-1.7b-mlx-8bit"
 echo "  parrot                             # run the daemon"
