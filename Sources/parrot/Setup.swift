@@ -12,7 +12,7 @@ struct Setup: ParsableCommand {
         print("parrot setup")
         print("============")
         print()
-        print("Parrot needs two permissions:")
+        print("Parrot needs two macOS permissions:")
         print("  1. Accessibility — to detect the hotkey globally and inject text at the cursor.")
         print("  2. Microphone — to record audio while you hold the hotkey.")
         print()
@@ -22,6 +22,12 @@ struct Setup: ParsableCommand {
         try waitForAccessibility()
         print()
         try waitForMicrophone()
+        print()
+        let azure = DoctorReport.checkAzure()
+        DoctorReport.print([azure])
+        if case .fail = azure.status {
+            throw ExitCode(1)
+        }
         print()
         print("✓ all set. Run `parrot` to start the daemon.")
     }

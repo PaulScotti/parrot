@@ -18,30 +18,28 @@ enum ParrotPaths {
             .appendingPathComponent("Parrot", isDirectory: true)
     }
 
-    static var qwenPython: URL {
-        if let configured = environment["PARROT_QWEN_PYTHON"], !configured.isEmpty {
+    static var azureResource: String {
+        environment["PARROT_AZURE_RESOURCE"].flatMap { $0.isEmpty ? nil : $0 }
+            ?? "korean-mai-eastus"
+    }
+
+    static var azureKeyFile: URL {
+        if let configured = environment["PARROT_AZURE_KEY_FILE"], !configured.isEmpty {
             return URL(fileURLWithPath: configured)
         }
-        return home.appendingPathComponent("runtime/qwen-mlx/venv/bin/python")
-    }
 
-    static var qwenWorker: URL {
-        if let configured = environment["PARROT_QWEN_WORKER"], !configured.isEmpty {
-            return URL(fileURLWithPath: configured)
+        let userHome = FileManager.default.homeDirectoryForCurrentUser
+        let standard = userHome.appendingPathComponent(".config/parrot/azure-api-key")
+        if FileManager.default.fileExists(atPath: standard.path) {
+            return standard
         }
-        return home.appendingPathComponent("scripts/qwen_mlx_worker.py")
-    }
 
-    static var modelCache: URL {
-        home.appendingPathComponent("models/huggingface", isDirectory: true)
-    }
+        let sharedKoreanAppKey = userHome.appendingPathComponent(".pi/korean/audio/azure-api-key")
+        if FileManager.default.fileExists(atPath: sharedKoreanAppKey.path) {
+            return sharedKoreanAppKey
+        }
 
-    static var runtimeCache: URL {
-        home.appendingPathComponent("runtime/caches", isDirectory: true)
-    }
-
-    static var temporaryAudio: URL {
-        home.appendingPathComponent("runtime/tmp", isDirectory: true)
+        return standard
     }
 
     static var logs: URL {
@@ -49,11 +47,9 @@ enum ParrotPaths {
     }
 
     static func ensureRuntimeDirectories() throws {
-        for directory in [modelCache, runtimeCache, temporaryAudio, logs] {
-            try FileManager.default.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true
-            )
-        }
+        try FileManager.default.createDirectory(
+            at: logs,
+            withIntermediateDirectories: true
+        )
     }
 }

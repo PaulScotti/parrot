@@ -20,17 +20,20 @@ struct Install: ParsableCommand {
     @Option(name: .long, help: "Push-to-talk key for the launch-at-login daemon.")
     var hotkey: Hotkey = .backslash
 
-    @Option(name: .long, help: "Transcription model for the launch-at-login daemon.")
-    var model: String?
-
     @Option(
         name: .long,
         help: "Microphone selection for the launch-at-login daemon (automatic, system, or built-in)."
     )
     var inputDevice: AudioInputPreference = .automatic
 
-    @Option(name: .long, help: "Folder containing Parrot models, runtime files, and scripts.")
+    @Option(name: .long, help: "Folder containing Parrot logs and source checkout.")
     var home: String?
+
+    @Option(name: .long, help: "Azure Speech resource name.")
+    var azureResource: String = ParrotPaths.azureResource
+
+    @Option(name: .long, help: "File containing the Azure Speech API key.")
+    var azureKeyFile: String = ParrotPaths.azureKeyFile.path
 
     func run() throws {
         if launchAtLogin == uninstall {
@@ -68,22 +71,24 @@ struct Install: ParsableCommand {
             at: parrotHome.appendingPathComponent("runtime/logs", isDirectory: true),
             withIntermediateDirectories: true
         )
-        if let model, ModelRegistry.find(model) == nil {
-            FileHandle.standardError.write(Data("unknown model: \(model)\n".utf8))
+        guard MAITranscriber.isValidResourceName(azureResource) else {
+            FileHandle.standardError.write(Data("invalid Azure Speech resource: \(azureResource)\n".utf8))
+            throw ExitCode(1)
+        }
+        let keyURL = URL(fileURLWithPath: azureKeyFile).standardizedFileURL
+        guard ProcessInfo.processInfo.environment["AZURE_API_KEY"]?.isEmpty == false
+            || FileManager.default.isReadableFile(atPath: keyURL.path) else {
+            FileHandle.standardError.write(Data("Azure API key is not readable at \(keyURL.path)\n".utf8))
             throw ExitCode(1)
         }
 
-        var arguments = [
+        let arguments = [
             binary,
             "run",
             "--skip-doctor",
             "--hotkey", hotkey.rawValue,
             "--input-device", inputDevice.rawValue,
         ]
-        if let model {
-            arguments.append(contentsOf: ["--model", model])
-        }
-
         let plist: [String: Any] = [
             "Label": Self.label,
             "ProgramArguments": arguments,
@@ -94,12 +99,8 @@ struct Install: ParsableCommand {
             "StandardErrorPath": parrotHome.appendingPathComponent("runtime/logs/parrot.err.log").path,
             "EnvironmentVariables": [
                 "PARROT_HOME": parrotHome.path,
-                "HF_HOME": parrotHome.appendingPathComponent("models/huggingface").path,
-                "HF_HUB_CACHE": parrotHome.appendingPathComponent("models/huggingface/hub").path,
-                "XDG_CACHE_HOME": parrotHome.appendingPathComponent("runtime/caches").path,
-                "HF_HUB_DISABLE_PROGRESS_BARS": "1",
-                "PYTHONUNBUFFERED": "1",
-                "TOKENIZERS_PARALLELISM": "false",
+                "PARROT_AZURE_RESOURCE": azureResource,
+                "PARROT_AZURE_KEY_FILE": keyURL.path,
             ],
         ]
 
@@ -128,7 +129,11 @@ struct Install: ParsableCommand {
         print("  plist:  \(url.path)")
         print("  binary: \(binary)")
         print("  hotkey: \(hotkey.displayName)")
-        print("  model:  \(model ?? "recommended")")
+        print("  model:  \(MAITranscriber.modelID)")
+        print("  style:  \(MAITranscriber.style)")
+        print("  lang:   \(MAITranscriber.language)")
+        print("  Azure:  \(azureResource)")
+        print("  key:    \(keyURL.path)")
         print("  input:  \(inputDevice.rawValue)")
         print("  home:   \(parrotHome.path)")
         print("  logs:   \(parrotHome.appendingPathComponent("runtime/logs").path)")

@@ -1,14 +1,13 @@
 import AppKit
 import ArgumentParser
 import Foundation
-import WhisperKit
 
 @main
 struct Parrot: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "parrot",
         abstract: "Minimal macOS dictation daemon. Hold the hotkey, speak, release.",
-        subcommands: [Run.self, Setup.self, Doctor.self, Models.self, Install.self],
+        subcommands: [Run.self, Setup.self, Doctor.self, Transcribe.self, Install.self],
         defaultSubcommand: Run.self
     )
 }
@@ -31,9 +30,6 @@ struct Run: ParsableCommand {
     @Flag(name: .long, help: "Disable the on-screen recording overlay.")
     var noOverlay: Bool = false
 
-    @Option(name: .long, help: "Model id to use. Defaults to the recommended model.")
-    var model: String?
-
     @Option(name: .long, help: "Push-to-talk key (fn, left-control, right-control, or backslash).")
     var hotkey: Hotkey = .backslash
 
@@ -54,36 +50,13 @@ struct Run: ParsableCommand {
             }
         }
 
-        let chosenModel: TranscriptionModel
-        if let id = model {
-            guard let m = ModelRegistry.find(id) else {
-                FileHandle.standardError.write(Data("unknown model: \(id)\n".utf8))
-                FileHandle.standardError.write(Data("run `parrot models list` to see options.\n".utf8))
-                throw ExitCode(1)
-            }
-            chosenModel = m
-        } else {
-            guard let m = ModelRegistry.recommended() else {
-                FileHandle.standardError.write(Data("no models registered\n".utf8))
-                throw ExitCode(1)
-            }
-            chosenModel = m
-        }
-
-        let transcriber = TranscriberFactory.make(model: chosenModel)
-        let warmupSemaphore = DispatchSemaphore(value: 0)
-        var warmupError: Error?
-        Task.detached {
-            do {
-                try await transcriber.warmUp()
-            } catch {
-                warmupError = error
-            }
-            warmupSemaphore.signal()
-        }
-        warmupSemaphore.wait()
-        if let warmupError {
-            FileHandle.standardError.write(Data("warmup failed: \(warmupError)\n".utf8))
+        let transcriber: MAITranscriber
+        do {
+            transcriber = try MAITranscriber()
+        } catch {
+            FileHandle.standardError.write(Data(
+                "Azure configuration failed: \(error.localizedDescription)\n".utf8
+            ))
             throw ExitCode(1)
         }
 
@@ -109,7 +82,7 @@ struct Run: ParsableCommand {
         }
         let menuBar = MainActor.assumeIsolated {
             MenuBarController(
-                modelID: chosenModel.id,
+                modelID: MAITranscriber.modelID,
                 hotkeyName: hotkey.displayName,
                 supportsHandsFree: hotkey == .backslash
             )
@@ -203,7 +176,7 @@ struct Run: ParsableCommand {
 
         let gesture = hotkey == .backslash ? "hold or double-tap" : "hold"
         FileHandle.standardError.write(Data(
-            "listening on \(hotkey.displayName.lowercased()) \(gesture) · model: \(chosenModel.id) · ^C to quit\n".utf8
+            "listening on \(hotkey.displayName.lowercased()) \(gesture) · model: \(MAITranscriber.modelID) · style: \(MAITranscriber.style) · language: \(MAITranscriber.language) · ^C to quit\n".utf8
         ))
         app.run()
     }
@@ -226,44 +199,46 @@ struct Doctor: ParsableCommand {
     }
 }
 
-struct Models: ParsableCommand {
+struct Transcribe: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Manage transcription models.",
-        subcommands: [List.self, Download.self]
+        abstract: "Transcribe a WAV file with the configured Azure service."
     )
 
-    struct List: ParsableCommand {
-        func run() throws {
-            for m in ModelRegistry.shared {
-                let star = m.recommended ? "★" : " "
-                let id = m.id.padding(toLength: 26, withPad: " ", startingAt: 0)
-                let langs = "[\(m.languages.joined(separator: ","))]"
-                    .padding(toLength: 9, withPad: " ", startingAt: 0)
-                let size = String(format: "%5d MB", m.sizeMB)
-                print("\(star) \(id) \(size)  \(langs)  \(m.displayName)")
-            }
+    @Argument(help: "Path to a WAV audio file.")
+    var file: String
+
+    func run() throws {
+        let fileURL = URL(fileURLWithPath: file).standardizedFileURL
+        let wav: Data
+        do {
+            wav = try Data(contentsOf: fileURL)
+        } catch {
+            FileHandle.standardError.write(Data("could not read \(fileURL.path)\n".utf8))
+            throw ExitCode(1)
         }
-    }
 
-    struct Download: ParsableCommand {
-        @Argument(help: "Model id to download.") var id: String
+        guard wav.starts(with: Data("RIFF".utf8)) else {
+            FileHandle.standardError.write(Data("input must be a WAV file\n".utf8))
+            throw ExitCode(1)
+        }
 
-        func run() throws {
-            guard let m = ModelRegistry.find(id) else {
-                print("unknown model: \(id)")
-                throw ExitCode(1)
-            }
-            let t = TranscriberFactory.make(model: m)
-
-            let sem = DispatchSemaphore(value: 0)
-            var capturedError: Error?
+        do {
+            let transcriber = try MAITranscriber()
+            let semaphore = DispatchSemaphore(value: 0)
+            var result: Result<String, Error>?
             Task.detached {
-                do { try await t.warmUp() } catch { capturedError = error }
-                await t.shutDown()
-                sem.signal()
+                do {
+                    result = .success(try await transcriber.transcribeWAV(wav))
+                } catch {
+                    result = .failure(error)
+                }
+                semaphore.signal()
             }
-            sem.wait()
-            if let e = capturedError { throw e }
+            semaphore.wait()
+            print(try result!.get())
+        } catch {
+            FileHandle.standardError.write(Data("transcription failed: \(error.localizedDescription)\n".utf8))
+            throw ExitCode(1)
         }
     }
 }

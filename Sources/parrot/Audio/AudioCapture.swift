@@ -143,8 +143,8 @@ final class AudioCapture {
 // MARK: - WAV writer (for debugging M3 captures)
 
 enum WAVWriter {
-    /// Write Float32 mono samples as 16-bit PCM WAV to `path`.
-    static func write(samples: [Float], sampleRate: Int, to path: String) throws {
+    /// Encode Float32 mono samples as 16-bit PCM WAV.
+    static func data(samples: [Float], sampleRate: Int) -> Data {
         let bytesPerSample = 2
         let dataSize = samples.count * bytesPerSample
 
@@ -169,7 +169,13 @@ enum WAVWriter {
             data.append(uint16LE(UInt16(bitPattern: i)))
         }
 
-        try data.write(to: URL(fileURLWithPath: path))
+        return data
+    }
+
+    /// Write Float32 mono samples as 16-bit PCM WAV to `path`.
+    static func write(samples: [Float], sampleRate: Int, to path: String) throws {
+        try data(samples: samples, sampleRate: sampleRate)
+            .write(to: URL(fileURLWithPath: path))
     }
 
     private static func uint32LE(_ v: UInt32) -> Data {

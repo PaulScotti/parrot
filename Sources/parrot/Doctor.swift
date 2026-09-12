@@ -20,11 +20,49 @@ enum DoctorReport {
         var checks = [
             checkMicrophone(hotkey: hotkey),
             checkAccessibility(),
+            checkAzure(),
         ]
         if hotkey == .fn {
             checks.append(checkFnKeyMapping())
         }
         return checks
+    }
+
+    static func checkAzure() -> Check {
+        let resource = ParrotPaths.azureResource
+        guard MAITranscriber.isValidResourceName(resource) else {
+            return Check(
+                name: "Azure transcription",
+                status: .fail("invalid resource name"),
+                remediation: "set PARROT_AZURE_RESOURCE to your Azure Speech resource name"
+            )
+        }
+
+        if let key = ProcessInfo.processInfo.environment["AZURE_API_KEY"],
+           !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return Check(name: "Azure transcription", status: .ok, remediation: nil)
+        }
+
+        let keyFile = ParrotPaths.azureKeyFile
+        guard FileManager.default.isReadableFile(atPath: keyFile.path) else {
+            return Check(
+                name: "Azure transcription",
+                status: .fail("API key unavailable"),
+                remediation: "save the Azure Speech key at \(keyFile.path)"
+            )
+        }
+        guard
+            let key = try? String(contentsOf: keyFile, encoding: .utf8),
+            !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return Check(
+                name: "Azure transcription",
+                status: .fail("API key file is empty"),
+                remediation: "save the Azure Speech key at \(keyFile.path)"
+            )
+        }
+
+        return Check(name: "Azure transcription", status: .ok, remediation: nil)
     }
 
     static func checkMicrophone(hotkey: Hotkey = .backslash) -> Check {
